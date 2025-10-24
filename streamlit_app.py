@@ -15,8 +15,10 @@ with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
     気象庁は、気象・津波・地震・火山などの防災情報を迅速かつ正確に伝えるために
     「気象庁防災情報XMLフォーマット」を策定・公開しています。XML形式で機械可読な情報が提供され、
     報道機関・自治体・防災アプリ等での自動処理・配信に活用できます。取得はPull型で自由に可能です。
+    本サイトでは streamlit community cloud の練習用として、Atom 随時フィールドから「気象特別警報・警報・注意報」を取得して .csv(BOM付)で出力します。
 
     参考: https://xml.kishou.go.jp/
+    git-hub: https://github.com/ginogeek/nonofficial-jmaxml-info-disaster-prevention/blob/
     """)
 
 @st.cache_data(ttl=600)
