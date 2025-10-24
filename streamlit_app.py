@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import xml.etree.ElementTree as ET
@@ -10,25 +9,15 @@ KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml
 
 st.set_page_config(page_title="気象庁 防災情報 (XML) ビューア", layout="wide")
 
-# --- 追加部分: 気象庁防災情報XMLの説明 ---
+# --- 説明セクション（気象庁防災情報XMLの概要） ---
 with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
     st.markdown("""
-    気象庁は、**気象・津波・地震・火山などの防災情報**を迅速かつ正確に伝えるために  
-    「気象庁防災情報XMLフォーマット」を策定し、2005年から運用しています。
+    気象庁は、気象・津波・地震・火山などの防災情報を迅速かつ正確に伝えるために
+    「気象庁防災情報XMLフォーマット」を策定・公開しています。XML形式で機械可読な情報が提供され、
+    報道機関・自治体・防災アプリ等での自動処理・配信に活用できます。取得はPull型で自由に可能です。
 
-    - **目的**: 自然災害の軽減、国民生活の向上、交通安全の確保、産業の発展を支援  
-    - **特徴**:  
-        - XML形式で機械可読な防災情報を提供  
-        - ニュースや自治体システムなどでの自動処理・配信が可能  
-        - 「Pull型」で誰でも自由に取得可能（ユーザー登録不要）  
-    - **利用例**:  
-        - 防災アプリや自治体システムでの自動通知  
-        - 報道機関による速報配信  
-        - 研究・教育分野でのデータ活用  
-
-    詳細は [気象庁公式サイト](https://xml.kishou.go.jp/) をご参照ください。
+    参考: https://xml.kishou.go.jp/
     """)
-
 
 @st.cache_data(ttl=600)
 def fetch_feed(url: str, hours_threshold: int = 48):
@@ -192,7 +181,6 @@ if entries:
     st.download_button(
         label="Atom フィードを CSV でダウンロード",
         data=csv_buffer_atom.getvalue().encode("utf-8-sig"),  # BOM付きUTF-8
-
         file_name=f"atom_feed_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
         mime="text/csv"
     )
@@ -220,4 +208,11 @@ if parsed:
     df = pd.DataFrame(transformed_data_for_db)
     df.to_csv(csv_buffer_warnings, index=False, encoding="utf-8-sig")
     count_placeholder.success(f"{count} 件のデータの読み込みが完了しました！")  # 完了メッセージ
-
+    st.download_button(
+        label="警報・注意報データを CSV でダウンロード",
+        data=csv_buffer_warnings.getvalue().encode("utf-8-sig"),  # BOM付きUTF-8
+        file_name=f"warnings_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
+        mime="text/csv"
+    )
+else:
+    st.info("抽出された '気象特別警報・警報・注意報' はありません。")
