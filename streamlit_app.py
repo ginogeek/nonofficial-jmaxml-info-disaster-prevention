@@ -7,7 +7,7 @@ import io
 
 KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml"
 
-st.set_page_config(page_title="気象庁 防災情報 (XML) ビューア", layout="wide")
+st.set_page_config(page_title="気象庁 防災情報XML（長期フィード）「気象特別警報・警報・注意報」発表履歴検索ツール", layout="wide")
 
 # --- 説明セクション（気象庁防災情報XMLの概要） ---
 with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
