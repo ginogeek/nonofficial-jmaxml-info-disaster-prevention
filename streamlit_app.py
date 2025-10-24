@@ -1,151 +1,160 @@
 import streamlit as st
+import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 import pandas as pd
-import math
-from pathlib import Path
+import io
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml"
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+st.set_page_config(page_title="気象庁 防災情報 (XML) ビューア", layout="wide")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# --- 追加部分: 気象庁防災情報XMLの説明 ---
+with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
+    st.markdown("""
+    気象庁は、**気象・津波・地震・火山などの防災情報**を迅速かつ正確に伝えるために  
+    「気象庁防災情報XMLフォーマット」を策定し、2005年から運用しています。
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    - **目的**: 自然災害の軽減、国民生活の向上、交通安全の確保、産業の発展を支援  
+    - **特徴**:  
+        - XML形式で機械可読な防災情報を提供  
+        - ニュースや自治体システムなどでの自動処理・配信が可能  
+        - 「Pull型」で誰でも自由に取得可能（ユーザー登録不要）  
+    - **利用例**:  
+        - 防災アプリや自治体システムでの自動通知  
+        - 報道機関による速報配信  
+        - 研究・教育分野でのデータ活用  
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    詳細は [気象庁公式サイト](https://xml.kishou.go.jp/) をご参照ください。
+    """)
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+@st.cache_data(ttl=600)
+def fetch_feed(url: str, hours_threshold: int = 48):
+    fetched = {"main_feed_xml": None, "linked_entries_xml": []}
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=hours_threshold)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        fetched["main_feed_xml"] = resp.content
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+        root = ET.fromstring(fetched["main_feed_xml"].decode("utf-8"))
+        atom_ns = "{http://www.w3.org/2005/Atom}"
 
-    return gdp_df
+        for entry in root.findall(f"{atom_ns}entry"):
+            entry_info = {
+                "EntryID": entry.find(f"{atom_ns}id").text if entry.find(f"{atom_ns}id") is not None else "N/A",
+                "FeedReportDateTime": entry.find(f"{atom_ns}updated").text if entry.find(f"{atom_ns}updated") is not None else "N/A",
+                "FeedTitle": entry.find(f"{atom_ns}title").text if entry.find(f"{atom_ns}title") is not None else "N/A",
+                "Author": entry.find(f"{atom_ns}author/{atom_ns}name").text if entry.find(f"{atom_ns}author/{atom_ns}name") is not None else "N/A",
+                "LinkedXMLData": None,
+                "LinkedXMLUrl": None
+            }
 
-gdp_df = get_gdp_data()
+            feed_report_time_str = entry_info.get("FeedReportDateTime")
+            skip_by_time = False
+            if feed_report_time_str and feed_report_time_str != "N/A":
+                try:
+                    if feed_report_time_str.endswith("Z"):
+                        feed_report_time = datetime.fromisoformat(feed_report_time_str[:-1]).replace(tzinfo=timezone.utc)
+                    else:
+                        feed_report_time = datetime.fromisoformat(feed_report_time_str)
+                    if feed_report_time < time_threshold:
+                        skip_by_time = True
+                except Exception:
+                    pass
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+            linked_xml_link_element = entry.find(f'{atom_ns}link[@type="application/xml"]')
+            if linked_xml_link_element is not None and not skip_by_time:
+                linked_xml_url = linked_xml_link_element.get("href")
+                if linked_xml_url:
+                    try:
+                        lx_resp = requests.get(linked_xml_url, timeout=15)
+                        lx_resp.raise_for_status()
+                        entry_info["LinkedXMLData"] = lx_resp.content
+                        entry_info["LinkedXMLUrl"] = linked_xml_url
+                    except Exception as e:
+                        entry_info["LinkedXMLData"] = None
+                        entry_info["LinkedXMLError"] = str(e)
+            fetched["linked_entries_xml"].append(entry_info)
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+    except Exception as e:
+        fetched["error"] = str(e)
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+    return fetched
 
-# Add some spacing
-''
-''
+def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
+    parsed = []
+    if not fetched_data or not fetched_data.get("linked_entries_xml"):
+        return parsed
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=hours_threshold)
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+    for entry in fetched_data["linked_entries_xml"]:
+        feed_title = entry.get("FeedTitle", "N/A")
+        if feed_title != "気象特別警報・警報・注意報":
+            continue
 
-countries = gdp_df['Country Code'].unique()
+        feed_time_str = entry.get("FeedReportDateTime")
+        try:
+            if feed_time_str and feed_time_str.endswith("Z"):
+                feed_time = datetime.fromisoformat(feed_time_str[:-1]).replace(tzinfo=timezone.utc)
+            elif feed_time_str:
+                feed_time = datetime.fromisoformat(feed_time_str)
+            else:
+                feed_time = None
+        except Exception:
+            feed_time = None
 
-if not len(countries):
-    st.warning("Select at least one country")
+        if feed_time and feed_time < time_threshold:
+            continue
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+        extracted = {
+            "EntryID": entry.get("EntryID", "N/A"),
+            "FeedReportDateTime": entry.get("FeedReportDateTime", "N/A"),
+            "FeedTitle": feed_title,
+            "Author": entry.get("Author", "N/A"),
+            "LinkedXMLDataPresent": bool(entry.get("LinkedXMLData")),
+            "LinkedXMLUrl": entry.get("LinkedXMLUrl", "")
+        }
 
-''
-''
-''
+        linked_bytes = entry.get("LinkedXMLData")
+        warnings = []
+        report_dt = extracted["FeedReportDateTime"]
 
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
+        if linked_bytes:
+            try:
+                xml_text = linked_bytes.decode("utf-8")
+            except Exception:
+                xml_text = linked_bytes.decode("utf-8", errors="replace")
+            try:
+                root = ET.fromstring(xml_text)
+                rt = root.find('.//{*}ReportDateTime')
+                if rt is not None and rt.text:
+                    report_dt = rt.text
 
-st.header('GDP over time', divider='gray')
+                headline = root.find('.//{*}Headline/{*}Text')
+                overall_detail = headline.text if headline is not None and headline.text else "N/A"
 
-''
+                items = root.findall('.//{*}Item')
+                for item in items:
+                    kind_el = item.find('.//{*}Kind/{*}Name')
+                    area_el = item.find('.//{*}Areas/{*}Area/{*}Name')
+                    if area_el is None:
+                        area_el = item.find('.//{*}Areas/{*}Area/{*}Prefecture/{*}Name')
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
+                    kind = kind_el.text if kind_el is not None and kind_el.text else "N/A"
+                    area = area_el.text if area_el is not None and area_el.text else "N/A"
 
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
+                    if kind != "N/A" or area != "N/A":
+                        warnings.append({"Kind": kind, "Area": area, "Detail": overall_detail})
+            except ET.ParseError:
+                warnings.append({"Kind": "解析エラー", "Area": "解析エラー", "Detail": "XML解析エラー"})
+            except Exception:
+                warnings.append({"Kind": "エラー", "Area": "エラー", "Detail": "不明なエラー"})
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+            warnings.append({"Kind": "取得失敗", "Area": "取得失敗", "Detail": "リンクXMLがありません"})
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+        if warnings and extracted["LinkedXMLDataPresent"]:
+            extracted["ReportDateTime"] = report_dt
+            extracted["WarningsAdvisories
