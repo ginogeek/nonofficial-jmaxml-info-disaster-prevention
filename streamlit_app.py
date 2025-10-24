@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import xml.etree.ElementTree as ET
@@ -27,6 +28,7 @@ with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
 
     詳細は [気象庁公式サイト](https://xml.kishou.go.jp/) をご参照ください。
     """)
+
 
 @st.cache_data(ttl=600)
 def fetch_feed(url: str, hours_threshold: int = 48):
@@ -157,4 +159,65 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
         if warnings and extracted["LinkedXMLDataPresent"]:
             extracted["ReportDateTime"] = report_dt
-            extracted["WarningsAdvisories
+            extracted["WarningsAdvisories"] = warnings
+            parsed.append(extracted)
+
+    return parsed
+
+st.title("気象庁 防災情報 (XML) ビューア")
+
+col1, col2 = st.columns([1, 2])
+with col1:
+    st.markdown("### 設定")
+    hours = st.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
+    if st.button("フィード取得 / 更新"):
+        st.experimental_rerun()
+
+with col2:
+    st.markdown("### フィード取得状況")
+    with st.spinner("フィードを取得しています..."):
+        data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
+
+if data.get("error"):
+    st.error(f"取得中にエラーが発生しました: {data['error']}")
+
+entries = data.get("linked_entries_xml", [])
+st.markdown(f"**フィード内エントリー数**: {len(entries)}")
+
+# Atom フィードの CSV ダウンロード機能
+if entries:
+    atom_feed_df = pd.DataFrame(entries)
+    csv_buffer_atom = io.StringIO()
+    atom_feed_df.to_csv(csv_buffer_atom, index=False, encoding="utf-8-sig")
+    st.download_button(
+        label="Atom フィードを CSV でダウンロード",
+        data=csv_buffer_atom.getvalue().encode("utf-8-sig"),  # BOM付きUTF-8
+
+        file_name=f"atom_feed_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
+parsed = parse_warnings_advisories(data, hours_threshold=hours)
+if parsed:
+    transformed_data_for_db = []
+    count_placeholder = st.empty()  # カウントアップ用のプレースホルダー
+    count = 0
+    for p in parsed:
+        for wa in p.get("WarningsAdvisories", []):
+            transformed_data_for_db.append({
+                "ReportDateTime": p.get("ReportDateTime"),
+                "Title": p.get("FeedTitle"),
+                "Author": p.get("Author"),
+                "Kind": wa.get("Kind"),
+                "Area": wa.get("Area"),
+                "Detail": wa.get("Detail"),
+                "EntryID": p.get("EntryID")
+            })
+            count += 1
+            count_placeholder.info(f"{count} 件のデータを読み込み中...")  # 同じ枠内で更新
+
+    csv_buffer_warnings = io.StringIO()
+    df = pd.DataFrame(transformed_data_for_db)
+    df.to_csv(csv_buffer_warnings, index=False, encoding="utf-8-sig")
+    count_placeholder.success(f"{count} 件のデータの読み込みが完了しました！")  # 完了メッセージ
+
