@@ -18,7 +18,7 @@ with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
     - 防災情報XMLは .XML 形式で機械可読な情報が提供され、報道機関・自治体・防災アプリ等での自動処理・配信に活用されています。一般人の私たちでもインターネットからPull型で自由に取得可能です。
     本サイトでは streamlit community cloud の練習用として、Atom 随時フィールドから「気象特別警報・警報・注意報」を取得して .csv(BOM付)で出力できるようにしました。
 
-    ## 参考: https://xml.kishou.go.jp/
+    - 参考: https://xml.kishou.go.jp/
     
     """)
 
