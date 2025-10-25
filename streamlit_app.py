@@ -156,7 +156,7 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
     return parsed
 
-st.title("気象庁 防災情報 (XML) ビューア")
+st.title("気象庁 防災情報XML（長期フィード）「気象特別警報・警報・注意報」発表履歴検索ツール")
 
 col1, col2 = st.columns([1, 2])
 with col1:
