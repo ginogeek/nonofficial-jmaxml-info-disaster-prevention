@@ -217,5 +217,59 @@ if parsed:
         file_name=f"warnings_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
         mime="text/csv"
     )
+
+    # --- ▼▼▼【コード2】のロジックをここから追加 ▼▼▼ ---
+    st.markdown("---") # 区切り線
+    st.markdown("### 📊 警報・注意報 ピボットテーブル")
+
+    # dfが利用可能で空でないか確認します。
+    if 'df' in locals() and df is not None and not df.empty:
+        with st.spinner("ピボットテーブルを作成しています..."):
+            try:
+                # ReportDateTimeをdatetimeオブジェクトに変換し、タイムゾーン情報を削除します。
+                df_pivot = df.copy() # 元のdfを変更しないようにコピー
+                df_pivot['ReportDateTime_cleaned'] = pd.to_datetime(df_pivot['ReportDateTime'], errors='coerce')
+                # タイムゾーン情報を削除します
+                df_pivot['ReportDateTime_cleaned'] = df_pivot['ReportDateTime_cleaned'].dt.tz_convert(None)
+            except Exception as e:
+                st.error(f"ReportDateTimeの変換エラー: {e}")
+                # 変換に失敗した場合は元の列を使用
+                df_pivot['ReportDateTime_cleaned'] = df_pivot['ReportDateTime']
+
+            try:
+                # ピボットテーブルを作成します。
+                # ピボットテーブルのインデックスと列にNaNが含まれているとエラーになる可能性があるため、事前にNaNを埋めます。
+                pivot_df = pd.pivot_table(
+                    df_pivot.fillna({'Kind': '不明な種類', 'Area': '不明な地域'}),
+                    values='EntryID', # 値としてカウントする列
+                    index=['ReportDateTime_cleaned', 'Title', 'Author'], # 行インデックス
+                    columns='Kind', # 列インデックス
+                    aggfunc='count', # 集計関数（カウント）
+                    fill_value=0 # 欠損値を0で埋めます
+                )
+
+                st.success("ピボットテーブルが正常に作成されました。")
+                st.dataframe(pivot_df) # StreamlitでDataFrameを表示
+
+                # ピボットテーブルをCSVファイルに保存（ダウンロードボタン）
+                csv_buffer_pivot = io.StringIO()
+                pivot_df.to_csv(csv_buffer_pivot, encoding='utf-8-sig') # BOM付きUTF-8
+                
+                st.download_button(
+                    label="ピボットテーブルを CSV でダウンロード",
+                    data=csv_buffer_pivot.getvalue().encode("utf-8-sig"), # BOM付きUTF-8
+                    file_name=f"warnings_pivot_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+
+            except Exception as e:
+                st.error(f"ピボットテーブルの作成エラー: {e}")
+                pivot_df = pd.DataFrame() # エラー発生時は空のDataFrameを作成
+
+    else:
+        # この分岐は 'if parsed:' の中にあるので、通常はdfは存在するはずだが、念のため。
+        st.info("ピボットテーブルを作成するためのデータがありません。")
+    # --- ▲▲▲【コード2】のロジックをここまで追加 ▲▲▲ ---
+
 else:
     st.info("抽出された '気象特別警報・警報・注意報' はありません。")
