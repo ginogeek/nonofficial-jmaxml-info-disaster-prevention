@@ -259,7 +259,7 @@ if parsed:
 
     # --- ▼▼▼【pydeck】のための緯度・経度マッピング ▼▼▼ ---
     st.markdown("---")
-    st.markdown("### 🗺️ 警報・注意報 発令地域マップ (Pydeck)")
+    st.markdown("### 🗺️ 警報・注意報 発令履歴地域マップ (mapbox)")
 
     # 緯度・経度マッピング辞書（簡易版：主要都道府県・地域）
     AREA_LAT_LON_MAP = {
