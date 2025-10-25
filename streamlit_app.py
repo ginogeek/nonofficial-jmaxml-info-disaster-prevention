@@ -186,25 +186,24 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
 st.title("気象庁 防災情報 (XML) ビューア")
 
-col1, col2 = st.columns([1, 2])
-with col1:
-    st.markdown("### 設定")
-    hours = st.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
-    if st.button("フィード取得 / 更新"):
-        # キャッシュをクリアして再実行
-        st.cache_data.clear()
-        st.rerun()
+# --- サイドバーにフォームを移動 ---
+st.sidebar.markdown("### ⚙️ データ取得設定")
+hours = st.sidebar.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
+if st.sidebar.button("フィード取得 / 更新"):
+    # キャッシュをクリアして再実行
+    st.cache_data.clear()
+    st.rerun()
+# --------------------------------
 
-with col2:
-    st.markdown("### フィード取得状況")
-    with st.spinner("フィードを取得しています..."):
-        data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
+st.markdown("### 📥 フィード取得状況")
+with st.spinner("フィードを取得しています..."):
+    data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
 
 if data.get("error"):
     st.error(f"取得中にエラーが発生しました: {data['error']}")
 
 entries = data.get("linked_entries_xml", [])
-st.markdown(f"**フィード内エントリー数**: {len(entries)} （うち、{hours}時間以内のXML取得対象エントリーのみ処理）")
+st.markdown(f"**フィード内エントリー数**: {len(entries)} （うち、**{hours}時間以内**のXML取得対象エントリーのみ処理）")
 
 # Atom フィードの CSV ダウンロード機能
 if entries:
@@ -241,12 +240,15 @@ if parsed:
                 "EntryID": p.get("EntryID")
             })
             count += 1
-            count_placeholder.info(f"{count} 件の警報・注意報データを読み込み中...")  # 同じ枠内で更新
+            # st.empty() の機能は、同じ場所を更新することなので、毎回新しい情報で上書きします
+            # ただし、処理の高速化のため、ここではUI更新を控えめにするか、最後に表示を確定させます。
+            # count_placeholder.info(f"{count} 件の警報・注意報データを読み込み中...") 
 
     csv_buffer_warnings = io.StringIO()
     df = pd.DataFrame(transformed_data_for_db)
     df.to_csv(csv_buffer_warnings, index=False, encoding="utf-8-sig")
-    count_placeholder.success(f"{count} 件の警報・注意報データの読み込みが完了しました！")  # 完了メッセージ
+    # 最終的な完了メッセージ
+    count_placeholder.success(f"✅ {count} 件の警報・注意報データの読み込みが完了しました！") 
     
     st.download_button(
         label="警報・注意報データ（生）を CSV でダウンロード",
@@ -342,8 +344,6 @@ if parsed:
                     }
                 }
 
-                
-                
                 st.pydeck_chart(pdk.Deck(
                     layers=[layer],
                     initial_view_state=view_state,
