@@ -3,6 +3,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 import pandas as pd
+
 import io
 import pydeck as pdk # pydeck をインポート
 
@@ -341,10 +342,34 @@ if parsed:
                     }
                 }
 
+                # 地理院タイルのラスタを背景にするスタイルJSONを自作
+gsi_style = {
+    "version": 8,
+    "sources": {
+        "gsi": {
+            "type": "raster",
+            "tiles": [
+                "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
+            ],
+            "tileSize": 256,
+            "attribution": "地理院タイル（国土地理院）"
+        }
+    },
+    "layers": [
+        {
+            "id": "gsi-layer",
+            "type": "raster",
+            "source": "gsi",
+            "minzoom": 0,
+            "maxzoom": 18
+        }
+    ]
+}
+                
                 st.pydeck_chart(pdk.Deck(
                     layers=[layer],
                     initial_view_state=view_state,
-                    map_style='mapbox://styles/mapbox/light-v9',
+                    map_style=gsi_style  # ← Mapbox スタイルの代わりに地理院タイルを指定 map_style='mapbox://styles/mapbox/light-v9',
                     tooltip=tooltip_html,
                 ))
                 
