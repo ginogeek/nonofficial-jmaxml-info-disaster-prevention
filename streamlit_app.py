@@ -11,18 +11,7 @@ KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml
 
 st.set_page_config(page_title="「気象特別警報・警報・注意報」発表履歴検索ツール from 気象庁 防災情報XML（長期フィード）", layout="wide")
 
-# --- 説明セクション（気象庁防災情報XMLの概要） ---
-with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
-    st.markdown("""
-    ## 防災情報XMLとは
-    - 気象庁は、気象・津波・地震・火山などの防災情報を迅速かつ正確に伝えるために
-    「気象庁防災情報XMLフォーマット」を策定・公開しています。
-    - 防災情報XMLは .XML 形式で機械可読な情報が提供され、報道機関・自治体・防災アプリ等での自動処理・配信に活用されています。一般人の私たちでもインターネットからPull型で自由に取得可能です。
-    本サイトでは streamlit community cloud の練習用として、Atom 随時フィールドから「気象特別警報・警報・注意報」を取得して .csv(BOM付)で出力できるようにしました。
 
-    - 参考: https://xml.kishou.go.jp/
-    
-    """)
 
 @st.cache_data(ttl=600)
 def fetch_feed(url: str, hours_threshold: int = 48):
@@ -186,6 +175,20 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
 st.title("「気象特別警報・警報・注意報」発表履歴検索ツール")
 st.markdown("from 気象庁 防災情報XML（長期フィード）")
+
+# --- 説明セクション（気象庁防災情報XMLの概要） ---
+with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
+    st.markdown("""
+    ## 防災情報XMLとは
+    - 気象庁は、気象・津波・地震・火山などの防災情報を迅速かつ正確に伝えるために
+    「気象庁防災情報XMLフォーマット」を策定・公開しています。
+    - 防災情報XMLは .XML 形式で機械可読な情報が提供され、報道機関・自治体・防災アプリ等での自動処理・配信に活用されています。一般人の私たちでもインターネットからPull型で自由に取得可能です。
+    本サイトでは streamlit community cloud の練習用として、Atom 随時フィールドから「気象特別警報・警報・注意報」を取得して .csv(BOM付)で出力できるようにしました。
+
+    - 参考: https://xml.kishou.go.jp/
+    
+    """)
+
 # --- サイドバーにフォームを移動 ---
 st.sidebar.markdown("### ⚙️ データ取得設定")
 hours = st.sidebar.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
