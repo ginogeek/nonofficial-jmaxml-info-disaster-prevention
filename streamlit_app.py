@@ -307,9 +307,13 @@ if parsed:
                 
                 df_map['color'] = df_map['Kind'].apply(get_color)
                 
-                # ツールチップ用のテキストを作成 (Detailが長い場合に備えてラップ)
-                df_map['tooltip'] = df_map.apply(lambda row: f"{row['Area']}: {row['Kind']}\n{''.join([s + ('\n' if (i + 1) % 40 == 0 else '') for i, s in enumerate(str(row['Detail']))])}", axis=1)
-
+                # ツールチップ用のテキストを作成
+                # ★★★ エラー修正箇所（f-string内の \n を避ける） ★★★
+                df_map['tooltip'] = df_map.apply(
+                    lambda row: f"{row['Area']}: {row['Kind']}" + "\n" +
+                    ''.join([s + ('\n' if (i + 1) % 40 == 0 else '') for i, s in enumerate(str(row['Detail']))]),
+                    axis=1
+                ).str.rstrip('\n') # 末尾の不要な改行を削除
 
                 # Pydeckの設定
                 view_state = pdk.ViewState(
@@ -427,4 +431,3 @@ if parsed:
 
 else:
     st.info(f"{hours}時間以内に発表された '気象特別警報・警報・注意報' はありません。")
-
