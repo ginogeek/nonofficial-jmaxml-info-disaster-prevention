@@ -184,7 +184,7 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
 # --- Streamlit UI ---
 
-st.title("気象庁 防災情報 (XML) ビューア")
+st.title("気象庁 防災情報XML（長期フィード）「気象特別警報・警報・注意報」発表履歴検索ツール")
 
 # --- サイドバーにフォームを移動 ---
 st.sidebar.markdown("### ⚙️ データ取得設定")
