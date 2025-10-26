@@ -367,8 +367,17 @@ if parsed:
                 
                 df_map['color'] = df_map['Kind'].apply(get_color)
                 
+                # --- ▼▼▼ エラー修正箇所 ▼▼▼ ---
                 # ツールチップ用のテキストを作成 (Detailが長い場合に備えてラップ)
-                df_map['tooltip'] = df_map.apply(lambda row: f"{row[area_col_name]}: {row['Kind']}\n{''.join([s + ('\n' if (i + 1) % 40 == 0 else '') for i, s in enumerate(str(row['Detail']))])}", axis=1)
+                # (f-string のネストを回避するために文字列連結 + を使用)
+                df_map['tooltip'] = df_map.apply(
+                    lambda row: (
+                        f"{row[area_col_name]}: {row['Kind']}\n" + 
+                        ''.join([s + ('\n' if (i + 1) % 40 == 0 else '') for i, s in enumerate(str(row['Detail']))])
+                    ), 
+                    axis=1
+                )
+                # --- ▲▲▲ エラー修正箇所 ▲▲▲ ---
 
 
                 # Pydeckの設定
@@ -453,7 +462,7 @@ if parsed:
                     st.success("各地域ごとの警報/注意報の発令状況（ピボットテーブル）が正常に作成されました。")
                     st.dataframe(manual_pivot_df) # StreamlitでDataFrameを表示
 
-                    # ピボットテーブルをCSVファイルに保存（ダウンロードボタン）
+                    # ピボTテーブルをCSVファイルに保存（ダウンロードボタン）
                     csv_buffer_pivot = io.StringIO()
                     # MultiIndexを維持したままCSVに保存
                     manual_pivot_df.to_csv(csv_buffer_pivot, encoding='utf-8-sig') # BOM付きUTF-8
@@ -466,7 +475,7 @@ if parsed:
                     )
 
                 except Exception as e:
-                    st.error(f"ピボットテーブル作成エラー: {e}")
+                    st.error(f"ピボTテーブル作成エラー: {e}")
                     manual_pivot_df = pd.DataFrame() # エラー発生時は空のDataFrameを作成
             else:
                  st.warning("日付情報の変換に失敗したため、ピボットテーブルを作成できませんでした。")
