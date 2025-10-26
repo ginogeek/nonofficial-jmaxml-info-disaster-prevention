@@ -1,19 +1,31 @@
-# :earth_americas: GDP dashboard template
+このコードは、気象庁が公開している気象防災情報 XML の「長期フィールド Atom」から、直近 48 時間以内に更新された「気象特別警報・警報・注意報」に関する情報を取得し、地域ごとに発令された回数を種類別に集計する処理を行っています。
 
-A simple Streamlit app showing the GDP of different countries in the world.
+処理の主な流れは以下の通りです。
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gdp-dashboard-template.streamlit.app/)
+### 1. XML データの取得
 
-### How to run it on your own machine
+*   気象防災情報 XML の公開ページ URL から、メインの Atom フィード XML を取得します。
+*   メインフィードから各エントリーへのリンク（特に `application/xml` タイプのリンク）を抽出し、個別の気象情報 XML データを取得します。
+*   取得したデータのうち、更新時刻が現在から 48 時間以内のものだけをフィルタリングします。
 
-1. Install the requirements
+### 2. XML データの解析
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+*   取得した個別の気象情報 XML データを解析し、レポート日時、情報のタイトル（「気象特別警報・警報・注意報」であることを確認）、著者、そして各地域における警告・注意報の種類（Kind）、地域名（Area）、地域コード（AreaCode）、詳細情報（Detail）を抽出します。
 
-2. Run the app
+### 3. 地域コードデータの読み込みと準備
 
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+*   ローカルに保存されている Excel ファイル (`100323AreaInfomationCity-AreaForecastLocalM.xls`) から、地域コードと地域名のマッピング情報を読み込み、辞書形式で準備します。ただし、今回の実行ではこのファイルが見つからず、この部分はスキップされています。
+
+### 4. データ構造の変換と列操作
+
+*   解析して抽出した情報を、データベースに格納しやすいフラットな形式に変換します。
+*   DataFrame に変換し、列名を日本語にリネームし、特定の順序に並べ替えます。
+
+### 5. ピボットテーブルの再作成と保存
+
+*   変換された DataFrame を使用して、手動でピボットテーブルを作成します。これは、各報告日、タイトル、著者、地域コード、地域名ごとに、それぞれの警告・注意報の種類（Kind）が何回発令されたかを集計するものです。
+*   作成したピボットテーブルを CSV ファイル (`kishou_warnings_advisories_pivot.csv`) として保存します。
+
+コードの実行結果として、取得・解析された「気象特別警報・警報・注意報」に関する情報が DataFrame として表示され、その後、地域ごとの警報・注意報の発令状況をまとめたピボットテーブルの最初の数行が表示されています。最後に、そのピボットテーブルが CSV ファイルとして保存されたことが示されています。
+
+なお、地域コードと地域名のマッピングファイルが見つからなかったというエラーが出ていますが、コードの主要な処理（XML の取得・解析、DataFrame への変換、ピボットテーブルの作成）は実行されています。
