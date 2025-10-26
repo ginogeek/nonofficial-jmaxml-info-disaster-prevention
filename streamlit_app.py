@@ -215,21 +215,23 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
 # --- Streamlit UI ---
 
-st.title("気象庁 防災情報 (XML) ビューア")
+st.title("気象特別警報・警報・注意報検索ツール")
+st.markdown("from 気象庁 防災情報 (XML) 長期フィールド Atom")
+# --- ▼▼▼ サイドバーへの移動 ▼▼▼ ---
+st.sidebar.markdown("### 設定")
+hours = st.sidebar.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
+if st.sidebar.button("フィード取得 / 更新"):
+    # キャッシュをクリアして再実行
+    st.cache_data.clear()
+    st.rerun()
+# --- ▲▲▲ サイドバーへの移動 ▲▲▲ ---
 
-col1, col2 = st.columns([1, 2])
-with col1:
-    st.markdown("### 設定")
-    hours = st.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
-    if st.button("フィード取得 / 更新"):
-        # キャッシュをクリアして再実行
-        st.cache_data.clear()
-        st.rerun()
 
-with col2:
-    st.markdown("### フィード取得状況")
-    with st.spinner("フィードを取得しています..."):
-        data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
+# --- ▼▼▼ メイン画面（旧col2） ▼▼▼ ---
+st.markdown("### フィード取得状況")
+with st.spinner("フィードを取得しています..."):
+    data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
+# --- ▲▲▲ メイン画面（旧col2） ▲▲▲ ---
 
 if data.get("error"):
     st.error(f"取得中にエラーが発生しました: {data['error']}")
@@ -475,7 +477,7 @@ if parsed:
                     )
 
                 except Exception as e:
-                    st.error(f"ピボTテーブル作成エラー: {e}")
+                    st.error(f"ピボットテーブル作成エラー: {e}")
                     manual_pivot_df = pd.DataFrame() # エラー発生時は空のDataFrameを作成
             else:
                  st.warning("日付情報の変換に失敗したため、ピボットテーブルを作成できませんでした。")
