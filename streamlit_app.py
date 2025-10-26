@@ -1,5 +1,4 @@
-# Google サイト所有権確認用メタタグ
-st.markdown('<head/><meta name="google-site-verification" content="Fis5rEfMP3iclr6h9DGQuWyiejHxQ1BOS5rjywMXdCI" /></head>', unsafe_allow_html=True)
+
 
 import streamlit as st
 import requests
@@ -9,7 +8,8 @@ import pandas as pd
 import io
 import pydeck as pdk # pydeck をインポート
 
-
+# Google サイト所有権確認用メタタグ
+st.markdown('<head/><meta name="google-site-verification" content="Fis5rEfMP3iclr6h9DGQuWyiejHxQ1BOS5rjywMXdCI" /></head>', unsafe_allow_html=True)
 
 KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml"
 
