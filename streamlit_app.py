@@ -6,6 +6,11 @@ import pandas as pd
 import io
 import pydeck as pdk # pydeck をインポート
 
+# Google サイト所有権確認用メタタグ
+st.markdown(
+    '<meta name="google-site-verification" content="e7uy9jPeMVK-8G5UiLomITbOV3uV2bOfpKai_h6hWM4">',
+    unsafe_allow_html=True
+
 KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml"
 
 st.set_page_config(page_title="気象庁 防災情報XML（長期フィード）「気象特別警報・警報・注意報」発表履歴検索ツール", layout="wide")
