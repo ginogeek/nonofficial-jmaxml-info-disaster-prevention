@@ -6,10 +6,7 @@ import pandas as pd
 import io
 import pydeck as pdk # pydeck をインポート
 
-# Google サイト所有権確認用メタタグ
-st.markdown(
-    '<meta name="google-site-verification" content="e7uy9jPeMVK-8G5UiLomITbOV3uV2bOfpKai_h6hWM4">',
-    unsafe_allow_html=True
+
 
 KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml"
 
