@@ -10,6 +10,11 @@ KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml
 
 st.set_page_config(page_title="気象庁 防災情報XML（長期フィード）「気象特別警報・警報・注意報」発表履歴検索ツール", layout="wide")
 
+# --- Streamlit UI ---
+
+st.title("気象特別警報・警報・注意報検索ツール")
+st.markdown("from 気象庁 防災情報 (XML) 長期フィールド Atom")
+
 # --- 説明セクション（気象庁防災情報XMLの概要） ---
 with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
     st.markdown("""
@@ -213,10 +218,7 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
     return parsed
 
-# --- Streamlit UI ---
 
-st.title("気象特別警報・警報・注意報検索ツール")
-st.markdown("from 気象庁 防災情報 (XML) 長期フィールド Atom")
 # --- ▼▼▼ サイドバーへの移動 ▼▼▼ ---
 st.sidebar.markdown("### 設定")
 hours = st.sidebar.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
