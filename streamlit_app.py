@@ -3,15 +3,25 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 import pandas as pd
-
 import io
 import pydeck as pdk # pydeck をインポート
 
 KISHOU_XML_PAGE_URL = "https://www.data.jma.go.jp/developer/xml/feed/extra_l.xml"
 
-st.set_page_config(page_title="「気象特別警報・警報・注意報」発表履歴検索ツール from 気象庁 防災情報XML（長期フィード）", layout="wide")
+st.set_page_config(page_title="気象庁 防災情報XML（長期フィード）「気象特別警報・警報・注意報」発表履歴検索ツール", layout="wide")
 
+# --- 説明セクション（気象庁防災情報XMLの概要） ---
+with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
+    st.markdown("""
+    ## 防災情報XMLとは
+    - 気象庁は、気象・津波・地震・火山などの防災情報を迅速かつ正確に伝えるために
+    「気象庁防災情報XMLフォーマット」を策定・公開しています。
+    - 防災情報XMLは .XML 形式で機械可読な情報が提供され、報道機関・自治体・防災アプリ等での自動処理・配信に活用されています。一般人の私たちでもインターネットからPull型で自由に取得可能です。
+    本サイトでは streamlit community cloud の練習用として、Atom 随時フィールドから「気象特別警報・警報・注意報」を取得して .csv(BOM付)で出力できるようにしました。
 
+    - 参考: https://xml.kishou.go.jp/
+    
+    """)
 
 @st.cache_data(ttl=600)
 def fetch_feed(url: str, hours_threshold: int = 48):
@@ -78,6 +88,7 @@ def fetch_feed(url: str, hours_threshold: int = 48):
 def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
     """
     fetch_feedから取得したデータのうち、「気象特別警報・警報・注意報」のみをパースします。
+    (Colab ステップ2 のロジックを反映)
     """
     parsed = []
     if not fetched_data or not fetched_data.get("linked_entries_xml"):
@@ -137,30 +148,61 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
                 # 各警報・注意報アイテムをパース
                 items = root.findall('.//{*}Item')
+                if not items:
+                    items = root.findall('.//{*}Headline//{*}Item') # Colabで追加されたパス
+
                 for item in items:
+                    kind = "N/A"
+                    area = "N/A"
+                    area_code = "N/A"
+
                     kind_el = item.find('.//{*}Kind/{*}Name')
-                    area_el = item.find('.//{*}Areas/{*}Area/{*}Name')
-                    # Area/Name がない場合、Prefecture/Name を試す
-                    if area_el is None:
-                        area_el = item.find('.//{*}Areas/{*}Area/{*}Prefecture/{*}Name')
-
                     kind = kind_el.text if kind_el is not None and kind_el.text else "N/A"
-                    area = area_el.text if area_el is not None and area_el.text else "N/A"
 
-                    if kind != "N/A" or area != "N/A":
-                        warnings.append({"Kind": kind, "Area": area, "Detail": overall_detail})
+                    area_el = item.find('.//{*}Areas/{*}Area/{*}Name')
+                    area_code_el = item.find('.//{*}Areas/{*}Area/{*}Code')
+                    
+                    if area_el is not None:
+                        area = area_el.text
+                        area_code = area_code_el.text if area_code_el is not None else "N/A"
+                    else:
+                        area_el = item.find('.//{*}Areas/{*}Area/{*}Prefecture/{*}Name')
+                        area_code_el = item.find('.//{*}Areas/{*}Area/{*}Prefecture/{*}Code')
+                        if area_el is not None:
+                            area = area_el.text
+                            area_code = area_code_el.text if area_code_el is not None else "N/A"
+                        else:
+                            # Colabの <Area> 直下検索ロジック
+                            area_el = item.find('.//{*}Area/{*}Name')
+                            area_code_el = item.find('.//{*}Area/{*}Code')
+                            if area_el is not None:
+                                area = area_el.text
+                                area_code = area_code_el.text if area_code_el is not None else "N/A"
+                            elif area_code_el is not None: # Area名がなくCodeだけある場合
+                                area_code = area_code_el.text
+                                area = f"コード:{area_code}" # Colabのフォールバック
+                            else:
+                                area = "N/A"
+                                area_code = "N/A"
+
+                    if kind != "N/A" or area != "N/A" or area_code != "N/A":
+                        warnings.append({"Kind": kind, "Area": area, "AreaCode": area_code, "Detail": overall_detail})
+                    elif item is not None:
+                        warnings.append({"Kind": "不明な種類", "Area": "不明な地域", "AreaCode": "N/A", "Detail": overall_detail})
+
             except ET.ParseError:
-                warnings.append({"Kind": "解析エラー", "Area": "解析エラー", "Detail": "XML解析エラー"})
-            except Exception:
-                warnings.append({"Kind": "エラー", "Area": "エラー", "Detail": "不明なエラー"})
+                warnings.append({"Kind": "解析エラー", "Area": "解析エラー", "AreaCode": "解析エラー", "Detail": "XML解析エラー"})
+            except Exception as e:
+                st.error(f"XML解析中に予期せぬエラー: {e}")
+                warnings.append({"Kind": "エラー", "Area": "エラー", "AreaCode": "エラー", "Detail": "不明なエラー"})
         else:
             # リンクされたXMLデータがない場合 (fetch_feedでスキップされた場合など)
             if entry.get("LinkedXMLError"):
-                 warnings.append({"Kind": "取得エラー", "Area": "取得エラー", "Detail": entry.get("LinkedXMLError")})
+                 warnings.append({"Kind": "取得エラー", "Area": "取得エラー", "AreaCode": "取得エラー", "Detail": entry.get("LinkedXMLError")})
             elif not extracted["LinkedXMLDataPresent"]:
-                 warnings.append({"Kind": "データなし", "Area": "データなし", "Detail": "時間外または取得対象外"})
+                 warnings.append({"Kind": "データなし", "Area": "データなし", "AreaCode": "データなし", "Detail": "時間外または取得対象外"})
             else:
-                 warnings.append({"Kind": "取得失敗", "Area": "取得失敗", "Detail": "リンクXMLがありません"})
+                 warnings.append({"Kind": "取得失敗", "Area": "取得失敗", "AreaCode": "取得失敗", "Detail": "リンクXMLがありません"})
 
 
         # パースした警報情報があり、かつ元データが存在した場合のみリストに追加
@@ -173,40 +215,27 @@ def parse_warnings_advisories(fetched_data, hours_threshold: int = 48):
 
 # --- Streamlit UI ---
 
-st.title("「気象特別警報・警報・注意報」発表履歴検索ツール")
-st.markdown("from 気象庁 防災情報XML（長期フィード）")
+st.title("気象庁 防災情報 (XML) ビューア")
 
-# --- 説明セクション（気象庁防災情報XMLの概要） ---
-with st.expander("📘 気象庁防災情報XMLとは？", expanded=True):
-    st.markdown("""
-    ## 防災情報XMLとは
-    - 気象庁は、気象・津波・地震・火山などの防災情報を迅速かつ正確に伝えるために
-    「気象庁防災情報XMLフォーマット」を策定・公開しています。
-    - 防災情報XMLは .XML 形式で機械可読な情報が提供され、報道機関・自治体・防災アプリ等での自動処理・配信に活用されています。一般人の私たちでもインターネットからPull型で自由に取得可能です。
-    本サイトでは streamlit community cloud の練習用として、Atom 随時フィールドから「気象特別警報・警報・注意報」を取得して .csv(BOM付)で出力できるようにしました。
+col1, col2 = st.columns([1, 2])
+with col1:
+    st.markdown("### 設定")
+    hours = st.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
+    if st.button("フィード取得 / 更新"):
+        # キャッシュをクリアして再実行
+        st.cache_data.clear()
+        st.rerun()
 
-    - 参考: https://xml.kishou.go.jp/
-    
-    """)
-
-# --- サイドバーにフォームを移動 ---
-st.sidebar.markdown("### ⚙️ データ取得設定")
-hours = st.sidebar.number_input("何時間以内のフィードを取得しますか？", min_value=1, max_value=168, value=48, step=1)
-if st.sidebar.button("フィード取得 / 更新"):
-    # キャッシュをクリアして再実行
-    st.cache_data.clear()
-    st.rerun()
-# --------------------------------
-
-st.markdown("### 📥 フィード取得状況")
-with st.spinner("フィードを取得しています..."):
-    data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
+with col2:
+    st.markdown("### フィード取得状況")
+    with st.spinner("フィードを取得しています..."):
+        data = fetch_feed(KISHOU_XML_PAGE_URL, hours_threshold=hours)
 
 if data.get("error"):
     st.error(f"取得中にエラーが発生しました: {data['error']}")
 
 entries = data.get("linked_entries_xml", [])
-st.markdown(f"**フィード内エントリー数**: {len(entries)} （うち、**{hours}時間以内**のXML取得対象エントリーのみ処理）")
+st.markdown(f"**フィード内エントリー数**: {len(entries)} （うち、{hours}時間以内のXML取得対象エントリーのみ処理）")
 
 # Atom フィードの CSV ダウンロード機能
 if entries:
@@ -231,27 +260,49 @@ if parsed:
     transformed_data_for_db = []
     count_placeholder = st.empty()  # カウントアップ用のプレースホルダー
     count = 0
+    # (Colab ステップ4 のロジックを反映)
     for p in parsed:
         for wa in p.get("WarningsAdvisories", []):
             transformed_data_for_db.append({
                 "ReportDateTime": p.get("ReportDateTime"),
                 "Title": p.get("FeedTitle"),
                 "Author": p.get("Author"),
-                "Kind": wa.get("Kind"),
+                "AreaCode": wa.get("AreaCode"), # AreaCode を追加
                 "Area": wa.get("Area"),
+                "Kind": wa.get("Kind"),
                 "Detail": wa.get("Detail"),
                 "EntryID": p.get("EntryID")
             })
             count += 1
-            # st.empty() の機能は、同じ場所を更新することなので、毎回新しい情報で上書きします
-            # ただし、処理の高速化のため、ここではUI更新を控えめにするか、最後に表示を確定させます。
-            # count_placeholder.info(f"{count} 件の警報・注意報データを読み込み中...") 
+            count_placeholder.info(f"{count} 件の警報・注意報データを読み込み中...")  # 同じ枠内で更新
+
+    
+    df = pd.DataFrame(transformed_data_for_db)
+    
+    # (Colab ステップ4 の列名変更を反映)
+    df = df.rename(columns={
+        "Area": "気象情報／府県予報区・細分区域等",
+        "AreaCode": "「AreaForecastLocalM」コード"
+    })
+    
+    # 列順序を定義 (存在しない列は無視される)
+    target_columns_order = [
+        "ReportDateTime",
+        "Title",
+        "Author",
+        "「AreaForecastLocalM」コード",
+        "気象情報／府県予報区・細分区域等",
+        "Kind",
+        "Detail",
+        "EntryID"
+    ]
+    ordered_columns = [col for col in target_columns_order if col in df.columns]
+    df = df[ordered_columns]
+
 
     csv_buffer_warnings = io.StringIO()
-    df = pd.DataFrame(transformed_data_for_db)
     df.to_csv(csv_buffer_warnings, index=False, encoding="utf-8-sig")
-    # 最終的な完了メッセージ
-    count_placeholder.success(f"✅ {count} 件の警報・注意報データの読み込みが完了しました！") 
+    count_placeholder.success(f"{count} 件の警報・注意報データの読み込みが完了しました！")  # 完了メッセージ
     
     st.download_button(
         label="警報・注意報データ（生）を CSV でダウンロード",
@@ -261,8 +312,9 @@ if parsed:
     )
 
     # --- ▼▼▼【pydeck】のための緯度・経度マッピング ▼▼▼ ---
+    # (列名変更に対応)
     st.markdown("---")
-    st.markdown("### 🗺️ 警報・注意報 発令履歴地域マップ (mapbox)")
+    st.markdown("### 🗺️ 警報・注意報 発令地域マップ (Pydeck)")
 
     # 緯度・経度マッピング辞書（簡易版：主要都道府県・地域）
     AREA_LAT_LON_MAP = {
@@ -286,15 +338,17 @@ if parsed:
         "大分県": [33.24, 131.61], "宮崎県": [31.91, 131.42], "鹿児島県": [31.56, 130.56],
         "沖縄県": [26.21, 127.68], "沖縄本島地方": [26.21, 127.68], "宮古島地方": [24.80, 125.28],
         "八重山地方": [24.34, 124.16]
+        # ... 他の市町村コードを追加可能 ...
     }
 
     if 'df' in locals() and df is not None and not df.empty:
         with st.spinner("地図データを準備しています..."):
             df_map = df.copy()
             
-            # 'Area' 列をマップのキーと照合
-            df_map['lat'] = df_map['Area'].map(lambda x: AREA_LAT_LON_MAP.get(x, [None, None])[0])
-            df_map['lon'] = df_map['Area'].map(lambda x: AREA_LAT_LON_MAP.get(x, [None, None])[1])
+            # 'Area' 列 (列名変更後) をマップのキーと照合
+            area_col_name = "気象情報／府県予報区・細分区域等" # Colabの列名
+            df_map['lat'] = df_map[area_col_name].map(lambda x: AREA_LAT_LON_MAP.get(x, [None, None])[0])
+            df_map['lon'] = df_map[area_col_name].map(lambda x: AREA_LAT_LON_MAP.get(x, [None, None])[1])
             
             # 緯度・経度が見つからなかったデータを削除
             df_map.dropna(subset=['lat', 'lon'], inplace=True)
@@ -313,13 +367,9 @@ if parsed:
                 
                 df_map['color'] = df_map['Kind'].apply(get_color)
                 
-                # ツールチップ用のテキストを作成
-                # ★★★ エラー修正箇所（f-string内の \n を避ける） ★★★
-                df_map['tooltip'] = df_map.apply(
-                    lambda row: f"{row['Area']}: {row['Kind']}" + "\n" +
-                    ''.join([s + ('\n' if (i + 1) % 40 == 0 else '') for i, s in enumerate(str(row['Detail']))]),
-                    axis=1
-                ).str.rstrip('\n') # 末尾の不要な改行を削除
+                # ツールチップ用のテキストを作成 (Detailが長い場合に備えてラップ)
+                df_map['tooltip'] = df_map.apply(lambda row: f"{row[area_col_name]}: {row['Kind']}\n{''.join([s + ('\n' if (i + 1) % 40 == 0 else '') for i, s in enumerate(str(row['Detail']))])}", axis=1)
+
 
                 # Pydeckの設定
                 view_state = pdk.ViewState(
@@ -355,11 +405,11 @@ if parsed:
                 ))
                 
                 with st.expander("マップデータの詳細（緯度・経度が付与されたデータ）"):
-                    st.dataframe(df_map[['Area', 'Kind', 'lat', 'lon', 'Detail']])
+                    st.dataframe(df_map[[area_col_name, 'Kind', 'lat', 'lon', 'Detail']])
 
             else:
                 st.warning("地図にプロットできる地域データ（緯度・経度マップと一致）がありませんでした。")
-                st.info(f"（検出された主な地域名: {list(df['Area'].unique())}）")
+                st.info(f"（検出された主な地域名: {list(df[area_col_name].unique())}）")
 
     else:
         st.info("地図表示対象のデータがありません。")
@@ -367,55 +417,46 @@ if parsed:
     # --- ▲▲▲【pydeck】のロジックをここまで追加 ▲▲▲ ---
 
 
-    # --- ▼▼▼【改修されたコード2】のロジックをここから追加 ▼▼▼ ---
+    # --- ▼▼▼【Colab ステップ5】のピボットテーブルロジックに置き換え ▼▼▼ ---
     st.markdown("---") # 区切り線
     st.markdown("### 📊 警報・注意報 ピボットテーブル (地域別)")
 
     # dfが利用可能で空でないか確認します。
     if 'df' in locals() and df is not None and not df.empty:
         with st.spinner("ピボットテーブルを作成しています..."):
+            report_date_col_exists = False
             try:
                 # ReportDateTimeをdatetimeオブジェクトに変換し、日付のみを保持します。
                 df_pivot = df.copy() # 元のdfを変更しないようにコピー
                 df_pivot['ReportDateTime_cleaned'] = pd.to_datetime(df_pivot['ReportDateTime'], errors='coerce')
                 df_pivot['ReportDateTime_cleaned'] = df_pivot['ReportDateTime_cleaned'].dt.tz_convert(None) # タイムゾーン削除
                 df_pivot['ReportDate'] = df_pivot['ReportDateTime_cleaned'].dt.date # 日付のみ取得
+                report_date_col_exists = True
             except Exception as e:
                 st.error(f"ReportDateTimeの変換エラー: {e}")
-                # 変換に失敗した場合、エラーを表示し、ReportDate列はNaTで埋める
+                # 変換に失敗した場合、エラーを表示
                 df_pivot['ReportDate'] = pd.NaT 
 
-            # ReportDateが正常に作成されたか確認 (すべてNaTでないか)
-            if 'ReportDate' in df_pivot.columns and not df_pivot['ReportDate'].isnull().all():
+            # ReportDateが正常に作成されたか確認
+            if report_date_col_exists and not df_pivot['ReportDate'].isnull().all():
+                
+                # Colab ステップ5 のインデックス列
+                manual_pivot_index_cols = ['ReportDate', 'Title', 'Author', '「AreaForecastLocalM」コード', '気象情報／府県予報区・細分区域等']
+                
                 try:
-                    # 各警報・注意報の種類（Kind）とReportDate, Title, Authorの組み合わせごとに、対象地域（Area）のリストを集計します。
-                    area_kind_summary_df = df_pivot.groupby(['ReportDate', 'Title', 'Author', 'Kind'])['Area'].agg(lambda x: list(x.unique())).reset_index()
-                    area_kind_summary_df = area_kind_summary_df.rename(columns={'Area': '対象地域リスト'})
+                    # 'Kind' 列を文字列型に変換 (unstackのため)
+                    df_pivot['Kind'] = df_pivot['Kind'].astype(str)
 
-                    # (オプション) 中間データを折りたたみで表示
-                    with st.expander("中間データ: 種類ごとの対象地域リスト（ユニーク）"):
-                        st.dataframe(area_kind_summary_df)
-
-                    # '対象地域リスト' 列を展開して、リストの各要素が新しい行になるようにします。
-                    expanded_df = area_kind_summary_df.explode('対象地域リスト')
-
-                    # ピボットテーブルを作成します。
-                    pivot_by_area_kind = pd.pivot_table(
-                        expanded_df.fillna({'Kind': '不明な種類', '対象地域リスト': '不明な地域'}),
-                        values='Kind', # 集計対象はKind自体（存在すれば1）
-                        index=['ReportDate', 'Title', 'Author', '対象地域リスト'], # 対象地域をインデックスに含める
-                        columns='Kind',
-                        aggfunc='size', # 各組み合わせの出現回数をカウント（存在すれば1）
-                        fill_value=0 # 欠損値を0で埋めます（発令なしを示す）
-                    )
+                    # Colab ステップ5 の groupby().size().unstack() を使用
+                    manual_pivot_df = df_pivot.groupby(manual_pivot_index_cols + ['Kind']).size().unstack(fill_value=0)
 
                     st.success("各地域ごとの警報/注意報の発令状況（ピボットテーブル）が正常に作成されました。")
-                    st.dataframe(pivot_by_area_kind) # StreamlitでDataFrameを表示
+                    st.dataframe(manual_pivot_df) # StreamlitでDataFrameを表示
 
                     # ピボットテーブルをCSVファイルに保存（ダウンロードボタン）
                     csv_buffer_pivot = io.StringIO()
                     # MultiIndexを維持したままCSVに保存
-                    pivot_by_area_kind.to_csv(csv_buffer_pivot, encoding='utf-8-sig') # BOM付きUTF-8
+                    manual_pivot_df.to_csv(csv_buffer_pivot, encoding='utf-8-sig') # BOM付きUTF-8
                     
                     st.download_button(
                         label="地域別ピボットテーブルを CSV でダウンロード",
@@ -425,15 +466,15 @@ if parsed:
                     )
 
                 except Exception as e:
-                    st.error(f"データ処理またはピボットテーブル作成エラー: {e}")
-                    pivot_by_area_kind = pd.DataFrame() # エラー発生時は空のDataFrameを作成
+                    st.error(f"ピボットテーブル作成エラー: {e}")
+                    manual_pivot_df = pd.DataFrame() # エラー発生時は空のDataFrameを作成
             else:
                  st.warning("日付情報の変換に失敗したため、ピボットテーブルを作成できませんでした。")
 
     else:
-        # この分岐は 'if parsed:' の中にあるので、通常はdfは存在するはずだが、念のため。
         st.info("ピボットテーブルを作成するためのデータがありません。")
-    # --- ▲▲▲【改修されたコード2】のロジックをここまで追加 ▲▲▲ ---
+    # --- ▲▲▲【Colab ステップ5】のロジックをここまで追加 ▲▲▲ ---
 
 else:
     st.info(f"{hours}時間以内に発表された '気象特別警報・警報・注意報' はありません。")
+
